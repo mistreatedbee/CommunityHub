@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Search, MoreHorizontal, User, LogIn } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -14,58 +14,80 @@ import { Badge } from '../../components/ui/Badge';
 import { Avatar } from '../../components/ui/Avatar';
 import { Dropdown } from '../../components/ui/Dropdown';
 import { useToast } from '../../components/ui/Toast';
-import { User as UserType } from '../../types';
+import { supabase } from '../../lib/supabase';
+import { setImpersonation } from '../../utils/impersonation';
+import { logAudit } from '../../utils/audit';
+
+type UserRow = {
+  user_id: string;
+  full_name: string | null;
+  email: string | null;
+  platform_role: 'user' | 'super_admin';
+};
+
+type MembershipRow = {
+  organization_id: string;
+  user_id: string;
+  role: 'owner' | 'admin' | 'supervisor' | 'employee' | 'member';
+  status: 'active' | 'inactive' | 'pending';
+};
+
+type TenantRow = {
+  id: string;
+  name: string;
+  slug: string;
+};
 export function PlatformUsersPage() {
   const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
-  // Mock Data
-  const users: UserType[] = [
-  {
-    id: '1',
-    name: 'Sarah Connor',
-    email: 'sarah@techinnovators.com',
-    role: 'admin',
-    organizationId: '1',
-    joinedAt: '2024-03-10',
-    status: 'active',
-    lastActiveAt: '2024-03-15T10:30:00Z'
-  },
-  {
-    id: '2',
-    name: 'John Smith',
-    email: 'john@greenearth.org',
-    role: 'admin',
-    organizationId: '2',
-    joinedAt: '2024-03-08',
-    status: 'active',
-    lastActiveAt: '2024-03-14T15:45:00Z'
-  },
-  {
-    id: '3',
-    name: 'Emily Chen',
-    email: 'emily@designcollective.io',
-    role: 'admin',
-    organizationId: '3',
-    joinedAt: '2024-02-15',
-    status: 'inactive',
-    lastActiveAt: '2024-02-28T09:15:00Z'
-  }];
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [memberships, setMemberships] = useState<MembershipRow[]>([]);
+  const [tenants, setTenants] = useState<TenantRow[]>([]);
 
-  const handleImpersonate = (user: UserType) => {
+  useEffect(() => {
+    const load = async () => {
+      const [{ data: userRows }, { data: memberRows }, { data: tenantRows }] = await Promise.all([
+        supabase.from('profiles').select('user_id, full_name, email, platform_role').returns<UserRow[]>(),
+        supabase.from('organization_memberships').select('organization_id, user_id, role, status').returns<MembershipRow[]>(),
+        supabase.from('organizations').select('id, name, slug').returns<TenantRow[]>()
+      ]);
+      setUsers(userRows ?? []);
+      setMemberships(memberRows ?? []);
+      setTenants(tenantRows ?? []);
+    };
+    void load();
+  }, []);
+
+  const handleImpersonate = async (user: UserRow) => {
     if (
     window.confirm(
-      `Are you sure you want to impersonate ${user.name}? You will see the platform exactly as they do.`
+      `Are you sure you want to impersonate ${user.full_name ?? user.email}? You will see the platform exactly as they do.`
     ))
     {
-      addToast(`Impersonating ${user.name}...`, 'info');
-      // In a real app, this would trigger a session switch
+      const membership = memberships.find((m) => m.user_id === user.user_id);
+      setImpersonation({
+        userId: user.user_id,
+        tenantId: membership?.organization_id ?? null,
+        startedAt: new Date().toISOString()
+      });
+      await logAudit('impersonation_started', membership?.organization_id ?? null, { user_id: user.user_id });
+      addToast('Impersonation started. Redirecting...', 'info');
+      if (membership?.organization_id) {
+        const tenant = tenants.find((t) => t.id === membership.organization_id);
+        window.location.href = tenant ? `/c/${tenant.slug}/admin` : '/communities';
+      } else {
+        window.location.href = '/communities';
+      }
     }
   };
-  const filteredUsers = users.filter(
-    (user) =>
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsers = useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    return users.filter(
+      (user) =>
+        (user.full_name ?? '').toLowerCase().includes(term) ||
+        (user.email ?? '').toLowerCase().includes(term)
+    );
+  }, [users, searchTerm]);
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
@@ -105,42 +127,40 @@ export function PlatformUsersPage() {
             </TableHead>
             <TableBody>
               {filteredUsers.map((user) =>
-              <TableRow key={user.id}>
+              <TableRow key={user.user_id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <Avatar alt={user.name} size="sm" />
+                      <Avatar alt={user.full_name ?? user.email ?? 'User'} size="sm" />
                       <div>
                         <div className="font-medium text-gray-900">
-                          {user.name}
+                          {user.full_name ?? 'Unnamed'}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {user.email}
+                          {user.email ?? 'No email'}
                         </div>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="default">{user.role}</Badge>
+                    <Badge variant="default">{user.platform_role}</Badge>
                   </TableCell>
                   <TableCell>
                     <span className="text-sm text-gray-600">
-                      Org #{user.organizationId}
+                      {tenants.find((t) => t.id === memberships.find((m) => m.user_id === user.user_id)?.organization_id)?.name ?? 'N/A'}
                     </span>
                   </TableCell>
                   <TableCell>
                     <Badge
                     variant={
-                    user.status === 'active' ? 'success' : 'secondary'
+                    memberships.find((m) => m.user_id === user.user_id)?.status === 'active' ? 'success' : 'secondary'
                     }>
 
-                      {user.status}
+                      {memberships.find((m) => m.user_id === user.user_id)?.status ?? 'inactive'}
                     </Badge>
                   </TableCell>
                   <TableCell>
                     <span className="text-sm text-gray-500">
-                      {user.lastActiveAt ?
-                    new Date(user.lastActiveAt).toLocaleDateString() :
-                    'Never'}
+                      -
                     </span>
                   </TableCell>
                   <TableCell>

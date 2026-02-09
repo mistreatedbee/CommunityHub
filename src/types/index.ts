@@ -1,4 +1,4 @@
-export type UserRole = 'public' | 'member' | 'leader' | 'admin' | 'super_admin';
+export type UserRole = 'public' | 'member' | 'employee' | 'supervisor' | 'admin' | 'owner' | 'super_admin';
 
 export interface User {
   id: string;
@@ -15,12 +15,17 @@ export interface User {
 export interface Organization {
   id: string;
   name: string;
+  slug?: string;
   logo?: string;
   primaryColor: string;
   secondaryColor: string;
   description?: string;
   contactEmail?: string;
   address?: string;
+  category?: string;
+  location?: string;
+  isPublic?: boolean;
+  status?: 'active' | 'pending' | 'suspended';
 }
 
 export interface Plan {
@@ -30,6 +35,10 @@ export interface Plan {
   billingCycle: 'monthly' | 'yearly';
   features: string[];
   maxMembers: number;
+  maxAdmins?: number;
+  maxStorageMB?: number;
+  maxPosts?: number;
+  maxResources?: number;
   isActive: boolean;
 }
 

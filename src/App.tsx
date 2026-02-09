@@ -7,177 +7,147 @@ import {
 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './components/ui/Toast';
-// Layouts
+import { AuthProvider } from './contexts/AuthContext';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { AuthenticatedLayout } from './components/layout/AuthenticatedLayout';
-// Public Pages
+import { RequireAuth } from './components/auth/RequireAuth';
+import { RequireSuperAdmin } from './components/auth/RequireSuperAdmin';
+import { RequireTenantRole } from './components/auth/RequireTenantRole';
+import { TenantRouteProvider } from './components/tenant/TenantRouteProvider';
+import { TenantLayoutWrapper } from './components/tenant/TenantLayoutWrapper';
 import { HomePage } from './pages/public/HomePage';
-import { AnnouncementsPage } from './pages/public/AnnouncementsPage';
-import { AnnouncementDetailPage } from './pages/public/AnnouncementDetailPage';
-import { NewsPage } from './pages/public/NewsPage';
-import { NewsDetailPage } from './pages/public/NewsDetailPage';
-import { EventsPage } from './pages/public/EventsPage';
-import { EventDetailPage } from './pages/public/EventDetailPage';
-import { CalendarPage } from './pages/public/CalendarPage';
-import { ContactPage } from './pages/public/ContactPage';
-import { ApplyPage } from './pages/public/ApplyPage';
-// Auth Pages
+import { CommunitiesPage } from './pages/public/CommunitiesPage';
+import { TenantPublicPage } from './pages/public/TenantPublicPage';
+import { TenantJoinPage } from './pages/public/TenantJoinPage';
+import { PricingPage } from './pages/public/PricingPage';
 import { LoginPage } from './pages/auth/LoginPage';
-import { RegisterPage } from './pages/auth/RegisterPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
-// Member Pages
-import { DashboardPage } from './pages/member/DashboardPage';
-import { ProfilePage } from './pages/member/ProfilePage';
-import { MessagesPage } from './pages/member/MessagesPage';
-import { DiscussionsPage } from './pages/member/DiscussionsPage';
-import { DiscussionThreadPage } from './pages/member/DiscussionThreadPage';
-import { GroupsPage } from './pages/member/GroupsPage';
-import { GroupDetailPage } from './pages/member/GroupDetailPage';
-// Admin Pages
-import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
-import { MembersPage } from './pages/admin/MembersPage';
-import { ApplicationsPage } from './pages/admin/ApplicationsPage';
-import { ApplicationReviewPage } from './pages/admin/ApplicationReviewPage';
-import { AdminAnnouncementsPage } from './pages/admin/AdminAnnouncementsPage';
-import { AdminNewsPage } from './pages/admin/AdminNewsPage';
-import { AdminEventsPage } from './pages/admin/AdminEventsPage';
-import { AdminSessionsPage } from './pages/admin/AdminSessionsPage';
-import { AdminGroupsPage } from './pages/admin/AdminGroupsPage';
-import { AdminDiscussionsPage } from './pages/admin/AdminDiscussionsPage';
-import { NotificationsPage } from './pages/admin/NotificationsPage';
-import { FormsPage } from './pages/admin/FormsPage';
-import { FormBuilderPage } from './pages/admin/FormBuilderPage';
-import { FormResponsesPage } from './pages/admin/FormResponsesPage';
-import { BrandingPage } from './pages/admin/settings/BrandingPage';
-import { AnalyticsPage } from './pages/admin/AnalyticsPage';
-// Super Admin Pages
+import { TenantAdminRegisterPage } from './pages/auth/TenantAdminRegisterPage';
+import { TenantMemberFeedPage } from './pages/tenant-member/TenantMemberFeedPage';
+import { TenantMemberAnnouncementsPage } from './pages/tenant-member/TenantMemberAnnouncementsPage';
+import { TenantMemberResourcesPage } from './pages/tenant-member/TenantMemberResourcesPage';
+import { TenantMemberNotificationsPage } from './pages/tenant-member/TenantMemberNotificationsPage';
+import { TenantMemberProfilePage } from './pages/tenant-member/TenantMemberProfilePage';
+import { TenantMemberGroupsPage } from './pages/tenant-member/TenantMemberGroupsPage';
+import { TenantMemberEventsPage } from './pages/tenant-member/TenantMemberEventsPage';
+import { TenantMemberProgramsPage } from './pages/tenant-member/TenantMemberProgramsPage';
+import { TenantAdminDashboardPage } from './pages/tenant-admin/TenantAdminDashboardPage';
+import { TenantAdminAnnouncementsPage } from './pages/tenant-admin/TenantAdminAnnouncementsPage';
+import { TenantAdminMembersPage } from './pages/tenant-admin/TenantAdminMembersPage';
+import { TenantAdminInvitationsPage } from './pages/tenant-admin/TenantAdminInvitationsPage';
+import { TenantAdminContentPage } from './pages/tenant-admin/TenantAdminContentPage';
+import { TenantAdminResourcesPage } from './pages/tenant-admin/TenantAdminResourcesPage';
+import { TenantAdminGroupsPage } from './pages/tenant-admin/TenantAdminGroupsPage';
+import { TenantAdminEventsPage } from './pages/tenant-admin/TenantAdminEventsPage';
+import { TenantAdminProgramsPage } from './pages/tenant-admin/TenantAdminProgramsPage';
+import { TenantAdminRegistrationFormPage } from './pages/tenant-admin/TenantAdminRegistrationFormPage';
+import { TenantAdminAnalyticsPage } from './pages/tenant-admin/TenantAdminAnalyticsPage';
+import { TenantAdminBillingPage } from './pages/tenant-admin/TenantAdminBillingPage';
+import { TenantAdminOnboardingPage } from './pages/tenant-admin/TenantAdminOnboardingPage';
 import { SuperAdminDashboardPage } from './pages/super-admin/SuperAdminDashboardPage';
 import { OrganizationsPage } from './pages/super-admin/OrganizationsPage';
+import { TenantDetailPage } from './pages/super-admin/TenantDetailPage';
 import { PlatformUsersPage } from './pages/super-admin/PlatformUsersPage';
 import { PlansPage } from './pages/super-admin/PlansPage';
 import { SystemAnalyticsPage } from './pages/super-admin/SystemAnalyticsPage';
-// Placeholder Pages
-const PlaceholderPage = ({ title }: {title: string;}) =>
-<div className="p-8 text-center">
-    <h1 className="text-2xl font-bold text-gray-900 mb-4">{title}</h1>
-    <p className="text-gray-500">This page is under construction.</p>
-  </div>;
+import { AuditLogsPage } from './pages/super-admin/AuditLogsPage';
+import { SuperAdminSettingsPage } from './pages/super-admin/SuperAdminSettingsPage';
 
 export function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <Router>
-          <Routes>
-            {/* Public Routes */}
-            <Route element={<PublicLayout />}>
-              <Route path="/" element={<HomePage />} />
+        <AuthProvider>
+          <ErrorBoundary>
+            <Router>
+              <Routes>
+              <Route element={<PublicLayout />}>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/communities" element={<CommunitiesPage />} />
+                <Route path="/pricing" element={<PricingPage />} />
+              <Route element={<TenantRouteProvider />}>
+                <Route path="/c/:tenantSlug" element={<TenantPublicPage />} />
+                <Route path="/c/:tenantSlug/join" element={<TenantJoinPage />} />
+              </Route>
+              </Route>
+
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<TenantAdminRegisterPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+
+              <Route element={<TenantRouteProvider />}>
+                <Route
+                  path="/c/:tenantSlug/app"
+                  element={
+                    <RequireAuth>
+                      <RequireTenantRole roles={['member', 'employee', 'supervisor', 'admin', 'owner']}>
+                        <TenantLayoutWrapper variant="tenant-member" />
+                      </RequireTenantRole>
+                    </RequireAuth>
+                  }
+                >
+                  <Route index element={<TenantMemberFeedPage />} />
+                  <Route path="announcements" element={<TenantMemberAnnouncementsPage />} />
+                  <Route path="resources" element={<TenantMemberResourcesPage />} />
+                  <Route path="groups" element={<TenantMemberGroupsPage />} />
+                  <Route path="events" element={<TenantMemberEventsPage />} />
+                  <Route path="programs" element={<TenantMemberProgramsPage />} />
+                  <Route path="notifications" element={<TenantMemberNotificationsPage />} />
+                  <Route path="profile" element={<TenantMemberProfilePage />} />
+                </Route>
+
+                <Route
+                  path="/c/:tenantSlug/admin"
+                  element={
+                    <RequireAuth>
+                      <RequireTenantRole roles={['admin', 'owner', 'supervisor']}>
+                        <TenantLayoutWrapper variant="tenant-admin" />
+                      </RequireTenantRole>
+                    </RequireAuth>
+                  }
+                >
+                  <Route index element={<TenantAdminDashboardPage />} />
+                  <Route path="onboarding" element={<TenantAdminOnboardingPage />} />
+                  <Route path="announcements" element={<TenantAdminAnnouncementsPage />} />
+                  <Route path="members" element={<TenantAdminMembersPage />} />
+                  <Route path="invitations" element={<TenantAdminInvitationsPage />} />
+                  <Route path="content" element={<TenantAdminContentPage />} />
+                  <Route path="resources" element={<TenantAdminResourcesPage />} />
+                  <Route path="groups" element={<TenantAdminGroupsPage />} />
+                  <Route path="events" element={<TenantAdminEventsPage />} />
+                  <Route path="programs" element={<TenantAdminProgramsPage />} />
+                  <Route path="registration-form" element={<TenantAdminRegistrationFormPage />} />
+                  <Route path="analytics" element={<TenantAdminAnalyticsPage />} />
+                  <Route path="billing" element={<TenantAdminBillingPage />} />
+                </Route>
+              </Route>
+
               <Route
-                path="/about"
-                element={<PlaceholderPage title="About Us" />} />
+                path="/super-admin"
+                element={
+                  <RequireAuth>
+                    <RequireSuperAdmin>
+                      <AuthenticatedLayout variant="super-admin" />
+                    </RequireSuperAdmin>
+                  </RequireAuth>
+                }
+              >
+                <Route index element={<SuperAdminDashboardPage />} />
+                <Route path="tenants" element={<OrganizationsPage />} />
+                <Route path="tenants/:tenantId" element={<TenantDetailPage />} />
+                <Route path="users" element={<PlatformUsersPage />} />
+                <Route path="licenses" element={<PlansPage />} />
+                <Route path="audit-logs" element={<AuditLogsPage />} />
+                <Route path="settings" element={<SuperAdminSettingsPage />} />
+                <Route path="analytics" element={<SystemAnalyticsPage />} />
+              </Route>
 
-
-              {/* Announcements */}
-              <Route path="/announcements" element={<AnnouncementsPage />} />
-              <Route
-                path="/announcements/:id"
-                element={<AnnouncementDetailPage />} />
-
-
-              {/* News */}
-              <Route path="/news" element={<NewsPage />} />
-              <Route path="/news/:id" element={<NewsDetailPage />} />
-
-              {/* Events */}
-              <Route path="/events" element={<EventsPage />} />
-              <Route path="/events/:id" element={<EventDetailPage />} />
-              <Route path="/calendar" element={<CalendarPage />} />
-
-              <Route path="/contact" element={<ContactPage />} />
-              <Route path="/apply" element={<ApplyPage />} />
-            </Route>
-
-            {/* Auth Routes */}
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-
-            {/* Protected Member Routes */}
-            <Route path="/dashboard" element={<AuthenticatedLayout />}>
-              <Route index element={<DashboardPage />} />
-              <Route path="events" element={<EventsPage />} />
-              <Route path="announcements" element={<AnnouncementsPage />} />
-              <Route path="groups" element={<GroupsPage />} />
-              <Route path="groups/:id" element={<GroupDetailPage />} />
-              <Route path="discussions" element={<DiscussionsPage />} />
-              <Route
-                path="discussions/:id"
-                element={<DiscussionThreadPage />} />
-
-              <Route path="messages" element={<MessagesPage />} />
-              <Route path="profile" element={<ProfilePage />} />
-              <Route
-                path="settings"
-                element={<PlaceholderPage title="Settings" />} />
-
-              <Route
-                path="resources"
-                element={<PlaceholderPage title="Resources" />} />
-
-            </Route>
-
-            {/* Admin Routes */}
-            <Route path="/admin" element={<AuthenticatedLayout />}>
-              <Route index element={<AdminDashboardPage />} />
-
-              {/* People */}
-              <Route path="members" element={<MembersPage />} />
-              <Route path="applications" element={<ApplicationsPage />} />
-              <Route
-                path="applications/:id"
-                element={<ApplicationReviewPage />} />
-
-
-              {/* Content */}
-              <Route
-                path="announcements"
-                element={<AdminAnnouncementsPage />} />
-
-              <Route path="news" element={<AdminNewsPage />} />
-              <Route path="events" element={<AdminEventsPage />} />
-              <Route path="sessions" element={<AdminSessionsPage />} />
-
-              {/* Community */}
-              <Route path="groups" element={<AdminGroupsPage />} />
-              <Route path="discussions" element={<AdminDiscussionsPage />} />
-              <Route path="notifications" element={<NotificationsPage />} />
-
-              {/* Forms */}
-              <Route path="forms" element={<FormsPage />} />
-              <Route path="forms/new" element={<FormBuilderPage />} />
-              <Route
-                path="forms/:id/responses"
-                element={<FormResponsesPage />} />
-
-
-              {/* Settings & Analytics */}
-              <Route path="settings" element={<BrandingPage />} />
-              <Route path="analytics" element={<AnalyticsPage />} />
-            </Route>
-
-            {/* Super Admin Routes */}
-            <Route path="/super-admin" element={<AuthenticatedLayout />}>
-              <Route index element={<SuperAdminDashboardPage />} />
-              <Route path="organizations" element={<OrganizationsPage />} />
-              <Route path="users" element={<PlatformUsersPage />} />
-              <Route path="plans" element={<PlansPage />} />
-              <Route path="analytics" element={<SystemAnalyticsPage />} />
-            </Route>
-
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Router>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+            </Router>
+          </ErrorBoundary>
+        </AuthProvider>
       </ToastProvider>
     </ThemeProvider>);
 

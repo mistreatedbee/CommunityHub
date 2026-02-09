@@ -4,19 +4,26 @@ import { Mail, ArrowLeft, CheckCircle } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useTheme } from '../../contexts/ThemeContext';
+import { supabase } from '../../lib/supabase';
+import { useToast } from '../../components/ui/Toast';
 export function ForgotPasswordPage() {
   const { organization } = useTheme();
+  const { addToast } = useToast();
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      setIsSuccess(true);
-    }, 1500);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/login`
+    });
+    setIsLoading(false);
+    if (error) {
+      addToast('Unable to send reset link.', 'error');
+      return;
+    }
+    setIsSuccess(true);
   };
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">

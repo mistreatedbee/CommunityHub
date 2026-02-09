@@ -28,9 +28,12 @@ export function ThemeProvider({ children }: {children: React.ReactNode;}) {
     );
   }, [organization]);
   const updateTheme = (updates: Partial<Organization>) => {
+    const sanitized = Object.fromEntries(
+      Object.entries(updates).filter(([, value]) => value !== undefined)
+    ) as Partial<Organization>;
     setOrganization((prev) => ({
       ...prev,
-      ...updates
+      ...sanitized
     }));
   };
   return (

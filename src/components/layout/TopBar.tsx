@@ -1,11 +1,68 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Bell, Search, User } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { Dropdown } from '../ui/Dropdown';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
+import { clearImpersonation, getImpersonation } from '../../utils/impersonation';
 interface TopBarProps {
   isSidebarCollapsed: boolean;
+  variant: 'tenant-admin' | 'tenant-member' | 'super-admin';
+  tenantId?: string | null;
+  tenantSlug?: string;
 }
-export function TopBar({ isSidebarCollapsed }: TopBarProps) {
+export function TopBar({ isSidebarCollapsed, variant, tenantId, tenantSlug = '' }: TopBarProps) {
+  const { user, profileName, signOut, memberships } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isImpersonating, setIsImpersonating] = useState(false);
+  const [memberTenants, setMemberTenants] = useState<{ id: string; name: string; slug: string }[]>([]);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!user || variant === 'super-admin' || !tenantId) {
+        setUnreadCount(0);
+        return;
+      }
+      const { count } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('organization_id', tenantId)
+        .is('read_at', null);
+      setUnreadCount(count ?? 0);
+    };
+
+    void load();
+  }, [user?.id, variant, tenantId]);
+
+  useEffect(() => {
+    const impersonation = getImpersonation();
+    setIsImpersonating(Boolean(impersonation));
+  }, [variant]);
+
+  useEffect(() => {
+    const loadTenants = async () => {
+      if (memberships.length < 2) {
+        setMemberTenants([]);
+        return;
+      }
+      const tenantIds = memberships.map((m) => m.organization_id);
+      const { data } = await supabase
+        .from('organizations')
+        .select('id, name, slug')
+        .in('id', tenantIds);
+      setMemberTenants(data ?? []);
+    };
+    void loadTenants();
+  }, [memberships]);
+
+  const profilePath =
+    variant === 'super-admin'
+      ? '/super-admin/settings'
+      : variant === 'tenant-admin'
+      ? tenantSlug ? `/c/${tenantSlug}/admin` : '/communities'
+      : tenantSlug ? `/c/${tenantSlug}/app/profile` : '/communities';
+
   return (
     <header
       className={`
@@ -31,9 +88,11 @@ export function TopBar({ isSidebarCollapsed }: TopBarProps) {
           {/* Notifications */}
           <button className="relative text-gray-500 hover:text-gray-700 transition-colors">
             <Bell className="w-5 h-5" />
-            <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center border-2 border-white">
-              3
-            </span>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center border-2 border-white">
+                {Math.min(unreadCount, 9)}
+              </span>
+            )}
           </button>
 
           {/* User Menu */}
@@ -43,26 +102,44 @@ export function TopBar({ isSidebarCollapsed }: TopBarProps) {
             <div className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-1.5 rounded-lg transition-colors">
                 <div className="text-right hidden sm:block">
                   <p className="text-sm font-medium text-gray-900">
-                    Alex Johnson
+                    {profileName ?? user?.email ?? 'User'}
                   </p>
-                  <p className="text-xs text-gray-500">Member</p>
+                  <p className="text-xs text-gray-500">
+                    {variant === 'super-admin' ? 'Super Admin' : variant === 'tenant-admin' ? 'Admin' : 'Member'}
+                  </p>
                 </div>
-                <Avatar alt="Alex Johnson" size="sm" />
+                <Avatar alt={profileName ?? user?.email ?? 'User'} size="sm" />
               </div>
             }
             items={[
             {
               label: 'My Profile',
-              href: '/dashboard/profile',
+              href: profilePath,
               icon: <User className="w-4 h-4" />
             },
+            ...memberTenants.map((tenant) => ({
+              label: `Switch to ${tenant.name}`,
+              href: `/c/${tenant.slug}/app`
+            })),
+            ...(variant === 'super-admin' && isImpersonating
+              ? [
+                  {
+                    label: 'Stop Impersonation',
+                    onClick: () => {
+                      clearImpersonation();
+                      window.location.reload();
+                    }
+                  }
+                ]
+              : []),
             {
               label: 'Settings',
-              href: '/dashboard/settings'
+              href: profilePath
             },
             {
               label: 'Sign Out',
-              danger: true
+              danger: true,
+              onClick: () => void signOut()
             }]
             } />
 

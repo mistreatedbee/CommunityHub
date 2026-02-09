@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import type { UserRole } from '../types';
+import { clearImpersonation } from '../utils/impersonation';
 
 type Membership = {
   organization_id: string;
@@ -21,6 +22,8 @@ type AuthContextType = {
   loading: boolean;
   role: UserRole | null;
   organizationId: string | null;
+  platformRole: 'user' | 'super_admin';
+  memberships: Membership[];
   profileName: string | null;
   signOut: () => Promise<void>;
 };
@@ -32,7 +35,6 @@ const rolePriority: Record<UserRole, number> = {
   member: 1,
   employee: 2,
   supervisor: 3,
-  leader: 3,
   admin: 4,
   owner: 5,
   super_admin: 6
@@ -55,6 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<UserRole | null>(null);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [profileName, setProfileName] = useState<string | null>(null);
+  const [platformRole, setPlatformRole] = useState<'user' | 'super_admin'>('user');
+  const [memberships, setMemberships] = useState<Membership[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -66,6 +70,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setRole(null);
         setOrganizationId(null);
         setProfileName(null);
+        setPlatformRole('user');
+        setMemberships([]);
         return;
       }
 
@@ -90,6 +96,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setRole(pickHighestRole(memberships, profileData?.platform_role ?? 'user'));
       setOrganizationId(activeMembership?.organization_id ?? null);
       setProfileName(profileData?.full_name ?? null);
+      setPlatformRole(profileData?.platform_role ?? 'user');
+      setMemberships(memberships);
     };
 
     supabase.auth.getSession().then(async ({ data }) => {
@@ -120,12 +128,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       role,
       organizationId,
+      platformRole,
+      memberships,
       profileName,
       signOut: async () => {
+        clearImpersonation();
         await supabase.auth.signOut();
       }
     }),
-    [loading, organizationId, profileName, role, session, user]
+    [loading, organizationId, platformRole, memberships, profileName, role, session, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

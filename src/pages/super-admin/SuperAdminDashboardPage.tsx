@@ -1,12 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Building2,
   Users,
   CreditCard,
   TrendingUp,
-  AlertTriangle,
-  CheckCircle,
   Plus } from
 'lucide-react';
 import { StatsCard } from '../../components/widgets/StatsCard';
@@ -21,46 +19,58 @@ import {
   TableRow } from
 '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
+import { supabase } from '../../lib/supabase';
 import { OrganizationWithPlan } from '../../types';
 export function SuperAdminDashboardPage() {
-  // Mock Data
-  const recentOrgs: OrganizationWithPlan[] = [
-  {
-    id: '1',
-    name: 'Tech Innovators',
-    primaryColor: '#3B82F6',
-    secondaryColor: '#10B981',
-    planId: 'pro',
-    planName: 'Pro Plan',
-    status: 'active',
-    createdAt: '2024-03-10',
-    adminCount: 2,
-    memberCount: 145
-  },
-  {
-    id: '2',
-    name: 'Green Earth Initiative',
-    primaryColor: '#10B981',
-    secondaryColor: '#F59E0B',
-    planId: 'starter',
-    planName: 'Starter',
-    status: 'trial',
-    createdAt: '2024-03-08',
-    adminCount: 1,
-    memberCount: 24
-  },
-  {
-    id: '3',
-    name: 'Design Collective',
-    primaryColor: '#8B5CF6',
-    secondaryColor: '#EC4899',
-    planId: 'enterprise',
-    planName: 'Enterprise',
-    status: 'active',
-    createdAt: '2024-03-05',
-    adminCount: 4,
-    memberCount: 890
-  }];
+  const [totalTenants, setTotalTenants] = useState(0);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [activeLicenses, setActiveLicenses] = useState(0);
+  const [monthlyRevenue, setMonthlyRevenue] = useState(0);
+  const [recentOrgs, setRecentOrgs] = useState<OrganizationWithPlan[]>([]);
+
+  useEffect(() => {
+    const load = async () => {
+      const [{ count: tenantCount }, { count: userCount }, { data: licenseRows }, { data: orgRows }] =
+        await Promise.all([
+          supabase.from('organizations').select('id', { count: 'exact', head: true }),
+          supabase.from('profiles').select('user_id', { count: 'exact', head: true }),
+          supabase
+            .from('organization_licenses')
+            .select('status, license:licenses(price_cents)')
+            .eq('status', 'active'),
+          supabase
+            .from('organizations')
+            .select('id, name, created_at, organization_licenses(status, license:licenses(id, name))')
+            .order('created_at', { ascending: false })
+            .limit(5)
+        ]);
+
+      setTotalTenants(tenantCount ?? 0);
+      setTotalUsers(userCount ?? 0);
+      const active = (licenseRows ?? []).length;
+      setActiveLicenses(active);
+      const revenue = (licenseRows ?? []).reduce((sum, row) => {
+        const price = (row as any).license?.price_cents ?? 0;
+        return sum + price;
+      }, 0);
+      setMonthlyRevenue(revenue / 100);
+
+      const mapped = (orgRows ?? []).map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        primaryColor: '#3B82F6',
+        secondaryColor: '#10B981',
+        planId: row.organization_licenses?.[0]?.license?.id ?? '',
+        planName: row.organization_licenses?.[0]?.license?.name ?? 'No plan',
+        status: row.organization_licenses?.[0]?.status ?? 'trial',
+        createdAt: row.created_at,
+        adminCount: 0,
+        memberCount: 0
+      }));
+      setRecentOrgs(mapped);
+    };
+    void load();
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -74,7 +84,7 @@ export function SuperAdminDashboardPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Link to="/super-admin/organizations">
+          <Link to="/super-admin/tenants">
             <Button leftIcon={<Plus className="w-4 h-4" />}>
               New Organization
             </Button>
@@ -85,8 +95,8 @@ export function SuperAdminDashboardPage() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatsCard
-          label="Total Organizations"
-          value="142"
+          label="Total Tenants"
+          value={totalTenants.toString()}
           trend={{
             value: '12 new',
             isPositive: true
@@ -96,7 +106,7 @@ export function SuperAdminDashboardPage() {
 
         <StatsCard
           label="Total Users"
-          value="15.4k"
+          value={totalUsers.toString()}
           trend={{
             value: '8% growth',
             isPositive: true
@@ -105,8 +115,8 @@ export function SuperAdminDashboardPage() {
           color="purple" />
 
         <StatsCard
-          label="Active Subscriptions"
-          value="118"
+          label="Active Licenses"
+          value={activeLicenses.toString()}
           trend={{
             value: '92% retention',
             isPositive: true
@@ -116,7 +126,7 @@ export function SuperAdminDashboardPage() {
 
         <StatsCard
           label="Monthly Revenue"
-          value="R42.5k"
+          value={`R${monthlyRevenue.toFixed(0)}`}
           trend={{
             value: '15% vs last mo',
             isPositive: true
@@ -133,7 +143,7 @@ export function SuperAdminDashboardPage() {
             <h3 className="text-lg font-bold text-gray-900">
               Recent Organizations
             </h3>
-            <Link to="/super-admin/organizations">
+            <Link to="/super-admin/tenants">
               <Button variant="ghost" size="sm">
                 View All
               </Button>
@@ -182,52 +192,14 @@ export function SuperAdminDashboardPage() {
           </div>
         </Card>
 
-        {/* System Health */}
         <Card>
           <CardHeader>
-            <h3 className="text-lg font-bold text-gray-900">System Health</h3>
+            <h3 className="text-lg font-bold text-gray-900">License Summary</h3>
           </CardHeader>
           <CardContent>
-            <div className="space-y-6">
-              <div className="flex items-start gap-4">
-                <div className="p-2 bg-green-100 text-green-600 rounded-lg">
-                  <CheckCircle className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-medium text-gray-900">API Performance</h4>
-                  <p className="text-sm text-gray-500">
-                    99.9% uptime. Average latency 45ms.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <div className="p-2 bg-yellow-100 text-yellow-600 rounded-lg">
-                  <AlertTriangle className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-medium text-gray-900">Database Load</h4>
-                  <p className="text-sm text-gray-500">
-                    Spike detected at 02:00 UTC. Currently stable at 45%
-                    capacity.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                  <Users className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-medium text-gray-900">
-                    Concurrent Users
-                  </h4>
-                  <p className="text-sm text-gray-500">
-                    Current peak: 1,240 active sessions.
-                  </p>
-                </div>
-              </div>
-            </div>
+            <p className="text-sm text-gray-600">
+              Active licenses generate the monthly revenue shown above. Manage plan pricing in the Licenses section.
+            </p>
           </CardContent>
         </Card>
       </div>

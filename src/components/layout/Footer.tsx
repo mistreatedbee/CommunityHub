@@ -5,9 +5,7 @@ import {
   Twitter,
   Instagram,
   Linkedin,
-  Mail,
-  MapPin,
-  Phone } from
+  Mail } from
 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 export function Footer() {
@@ -27,7 +25,7 @@ export function Footer() {
               </span>
             </Link>
             <p className="text-gray-500 text-sm leading-relaxed mb-6">
-              {organization.description}
+              {organization.description ?? 'Launch and manage modern community hubs.'}
             </p>
             <div className="flex gap-4">
               <a
@@ -63,34 +61,34 @@ export function Footer() {
             <ul className="space-y-3">
               <li>
                 <Link
-                  to="/about"
+                  to="/communities"
                   className="text-gray-500 hover:text-[var(--color-primary)] text-sm">
 
-                  About Us
+                  Communities
                 </Link>
               </li>
               <li>
                 <Link
-                  to="/events"
+                  to="/pricing"
                   className="text-gray-500 hover:text-[var(--color-primary)] text-sm">
 
-                  Events
+                  Pricing
                 </Link>
               </li>
               <li>
                 <Link
-                  to="/news"
+                  to="/login"
                   className="text-gray-500 hover:text-[var(--color-primary)] text-sm">
 
-                  News & Updates
+                  Login
                 </Link>
               </li>
               <li>
                 <Link
-                  to="/contact"
+                  to="/register"
                   className="text-gray-500 hover:text-[var(--color-primary)] text-sm">
 
-                  Contact
+                  Start a Community
                 </Link>
               </li>
             </ul>
@@ -101,36 +99,16 @@ export function Footer() {
             <h3 className="font-semibold text-gray-900 mb-4">Resources</h3>
             <ul className="space-y-3">
               <li>
-                <Link
-                  to="/faq"
-                  className="text-gray-500 hover:text-[var(--color-primary)] text-sm">
-
-                  FAQ
-                </Link>
+                <span className="text-gray-500 text-sm">Support</span>
               </li>
               <li>
-                <Link
-                  to="/privacy"
-                  className="text-gray-500 hover:text-[var(--color-primary)] text-sm">
-
-                  Privacy Policy
-                </Link>
+                <span className="text-gray-500 text-sm">Privacy Policy</span>
               </li>
               <li>
-                <Link
-                  to="/terms"
-                  className="text-gray-500 hover:text-[var(--color-primary)] text-sm">
-
-                  Terms of Service
-                </Link>
+                <span className="text-gray-500 text-sm">Terms of Service</span>
               </li>
               <li>
-                <Link
-                  to="/support"
-                  className="text-gray-500 hover:text-[var(--color-primary)] text-sm">
-
-                  Support
-                </Link>
+                <span className="text-gray-500 text-sm">Help Center</span>
               </li>
             </ul>
           </div>
@@ -139,21 +117,9 @@ export function Footer() {
           <div>
             <h3 className="font-semibold text-gray-900 mb-4">Contact Us</h3>
             <ul className="space-y-4">
-              <li className="flex items-start gap-3 text-sm text-gray-500">
-                <MapPin className="w-5 h-5 text-[var(--color-primary)] shrink-0" />
-                <span>
-                  123 Community Lane,
-                  <br />
-                  San Francisco, CA 94105
-                </span>
-              </li>
-              <li className="flex items-center gap-3 text-sm text-gray-500">
-                <Phone className="w-5 h-5 text-[var(--color-primary)] shrink-0" />
-                <span>+1 (555) 123-4567</span>
-              </li>
               <li className="flex items-center gap-3 text-sm text-gray-500">
                 <Mail className="w-5 h-5 text-[var(--color-primary)] shrink-0" />
-                <span>{organization.contactEmail}</span>
+                <span>{organization.contactEmail ?? 'support@communityhub.local'}</span>
               </li>
             </ul>
           </div>

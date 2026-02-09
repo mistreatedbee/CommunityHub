@@ -2,16 +2,25 @@ import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
-export function AuthenticatedLayout() {
+type LayoutProps = {
+  variant: 'tenant-admin' | 'tenant-member' | 'super-admin';
+  tenantSlug?: string;
+  tenantName?: string;
+  tenantId?: string | null;
+};
+export function AuthenticatedLayout({ variant, tenantSlug, tenantName, tenantId }: LayoutProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   return (
     <div className="min-h-screen bg-gray-50">
       <Sidebar
         isCollapsed={isSidebarCollapsed}
-        toggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)} />
+        toggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        variant={variant}
+        tenantSlug={tenantSlug}
+        tenantName={tenantName} />
 
 
-      <TopBar isSidebarCollapsed={isSidebarCollapsed} />
+      <TopBar isSidebarCollapsed={isSidebarCollapsed} variant={variant} tenantId={tenantId} tenantSlug={tenantSlug} />
 
       <main
         className={`

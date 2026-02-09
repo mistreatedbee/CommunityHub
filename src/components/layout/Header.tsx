@@ -14,20 +14,12 @@ export function Header() {
     href: '/'
   },
   {
-    label: 'Announcements',
-    href: '/announcements'
+    label: 'Communities',
+    href: '/communities'
   },
   {
-    label: 'News',
-    href: '/news'
-  },
-  {
-    label: 'Events',
-    href: '/events'
-  },
-  {
-    label: 'Contact',
-    href: '/contact'
+    label: 'Pricing',
+    href: '/pricing'
   }];
 
   const isActive = (path: string) => {
@@ -76,8 +68,8 @@ export function Header() {
                 Log in
               </Button>
             </Link>
-            <Link to="/apply">
-              <Button size="sm">Join Us</Button>
+            <Link to="/register">
+              <Button size="sm">Start a Community</Button>
             </Link>
           </div>
 
@@ -111,8 +103,8 @@ export function Header() {
                   Log in
                 </Button>
               </Link>
-              <Link to="/apply" onClick={() => setIsMenuOpen(false)}>
-                <Button className="w-full justify-start">Join Us</Button>
+              <Link to="/register" onClick={() => setIsMenuOpen(false)}>
+                <Button className="w-full justify-start">Start a Community</Button>
               </Link>
             </div>
           </div>

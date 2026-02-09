@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Search,
@@ -24,89 +24,146 @@ import { Dropdown } from '../../components/ui/Dropdown';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { useToast } from '../../components/ui/Toast';
-import { OrganizationWithPlan } from '../../types';
+import { supabase } from '../../lib/supabase';
+import { logAudit } from '../../utils/audit';
+type TenantRow = {
+  id: string;
+  name: string;
+  slug: string;
+  status: 'active' | 'pending' | 'suspended';
+  created_at: string;
+  organization_licenses: {
+    status: 'trial' | 'active' | 'expired' | 'cancelled';
+    license: { id: string; name: string } | null;
+  }[];
+};
+
+type MembershipRow = {
+  organization_id: string;
+  role: 'owner' | 'admin' | 'supervisor' | 'employee' | 'member';
+  status: 'active' | 'inactive' | 'pending';
+};
+
+type LicenseRow = {
+  id: string;
+  name: string;
+};
+
 export function OrganizationsPage() {
   const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  // Mock Data
-  const [organizations, setOrganizations] = useState<OrganizationWithPlan[]>([
-  {
-    id: '1',
-    name: 'Tech Innovators',
-    primaryColor: '#3B82F6',
-    secondaryColor: '#10B981',
-    planId: 'pro',
-    planName: 'Pro Plan',
-    status: 'active',
-    createdAt: '2024-03-10',
-    adminCount: 2,
-    memberCount: 145
-  },
-  {
-    id: '2',
-    name: 'Green Earth Initiative',
-    primaryColor: '#10B981',
-    secondaryColor: '#F59E0B',
-    planId: 'starter',
-    planName: 'Starter',
-    status: 'trial',
-    createdAt: '2024-03-08',
-    adminCount: 1,
-    memberCount: 24
-  },
-  {
-    id: '3',
-    name: 'Design Collective',
-    primaryColor: '#8B5CF6',
-    secondaryColor: '#EC4899',
-    planId: 'enterprise',
-    planName: 'Enterprise',
-    status: 'suspended',
-    createdAt: '2024-02-15',
-    adminCount: 4,
-    memberCount: 890
-  }]
-  );
-  const handleStatusChange = (
-  id: string,
-  newStatus: 'active' | 'suspended') =>
-  {
-    setOrganizations((orgs) =>
-    orgs.map((org) =>
-    org.id === id ?
-    {
-      ...org,
-      status: newStatus
-    } :
-    org
-    )
-    );
-    addToast(
-      `Organization ${newStatus === 'active' ? 'activated' : 'suspended'} successfully`,
-      'success'
-    );
+  const [organizations, setOrganizations] = useState<TenantRow[]>([]);
+  const [memberships, setMemberships] = useState<MembershipRow[]>([]);
+  const [plans, setPlans] = useState<LicenseRow[]>([]);
+  const [name, setName] = useState('');
+  const [slug, setSlug] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [planId, setPlanId] = useState('');
+
+  const loadData = async () => {
+    const [{ data: orgRows }, { data: memberRows }, { data: planRows }] = await Promise.all([
+      supabase
+        .from('organizations')
+        .select('id, name, slug, status, created_at, organization_licenses(status, license:licenses(id, name))')
+        .order('created_at', { ascending: false })
+        .returns<TenantRow[]>(),
+      supabase
+        .from('organization_memberships')
+        .select('organization_id, role, status')
+        .returns<MembershipRow[]>(),
+      supabase
+        .from('licenses')
+        .select('id, name')
+        .order('price_cents', { ascending: true })
+        .returns<LicenseRow[]>()
+    ]);
+    setOrganizations(orgRows ?? []);
+    setMemberships(memberRows ?? []);
+    setPlans(planRows ?? []);
+    if (!planId && planRows?.length) setPlanId(planRows[0].id);
   };
-  const handleDelete = (id: string) => {
-    if (
-    window.confirm(
-      'Are you sure you want to delete this organization? This action cannot be undone.'
-    ))
-    {
-      setOrganizations((orgs) => orgs.filter((org) => org.id !== id));
-      addToast('Organization deleted', 'success');
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  const handleStatusChange = async (id: string, newStatus: 'active' | 'suspended') => {
+    const { error } = await supabase.from('organizations').update({ status: newStatus }).eq('id', id);
+    if (error) {
+      addToast('Unable to update status.', 'error');
+      return;
     }
+    await logAudit('tenant_status_changed', id, { status: newStatus });
+    addToast(`Tenant ${newStatus === 'active' ? 'activated' : 'suspended'}.`, 'success');
+    await loadData();
   };
-  const filteredOrgs = organizations.filter((org) =>
-  org.name.toLowerCase().includes(searchTerm.toLowerCase())
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this tenant?')) return;
+    const { error } = await supabase.from('organizations').delete().eq('id', id);
+    if (error) {
+      addToast('Unable to delete tenant.', 'error');
+      return;
+    }
+    await logAudit('tenant_deleted', id, {});
+    addToast('Tenant deleted.', 'success');
+    await loadData();
+  };
+
+  const handleCreate = async () => {
+    if (!name.trim() || !slug.trim() || !adminEmail.trim()) {
+      addToast('Name, slug, and admin email are required.', 'error');
+      return;
+    }
+    const { data: tenantData, error } = await supabase
+      .from('organizations')
+      .insert({
+        name,
+        slug,
+        status: 'active'
+      })
+      .select('id')
+      .maybeSingle<{ id: string }>();
+    if (error || !tenantData) {
+      addToast('Unable to create tenant.', 'error');
+      return;
+    }
+    await supabase.from('organization_licenses').insert({
+      organization_id: tenantData.id,
+      license_id: planId,
+      status: 'trial'
+    });
+    await supabase.from('tenant_settings').insert({
+      organization_id: tenantData.id
+    });
+    await supabase.from('invitations').insert({
+      organization_id: tenantData.id,
+      email: adminEmail,
+      role: 'admin',
+      token: crypto.randomUUID(),
+      expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString()
+    });
+    await logAudit('tenant_created', tenantData.id, { name, slug, planId });
+    addToast('Tenant created.', 'success');
+    setIsCreateModalOpen(false);
+    setName('');
+    setSlug('');
+    setAdminEmail('');
+    await loadData();
+  };
+
+  const filteredOrgs = useMemo(
+    () => organizations.filter((org) => org.name.toLowerCase().includes(searchTerm.toLowerCase())),
+    [organizations, searchTerm]
   );
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Organizations</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Tenants</h1>
           <p className="text-gray-500">
-            Manage all organizations on the platform.
+            Manage all tenants on the platform.
           </p>
         </div>
         <Button
@@ -157,24 +214,26 @@ export function OrganizationsPage() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>{org.planName}</TableCell>
+                  <TableCell>{org.organization_licenses?.[0]?.license?.name ?? 'No plan'}</TableCell>
                   <TableCell>
                     <Badge
                     variant={
                     org.status === 'active' ?
                     'success' :
-                    org.status === 'trial' ?
-                    'info' :
                     'danger'
                     }>
 
                       {org.status.charAt(0).toUpperCase() + org.status.slice(1)}
                     </Badge>
                   </TableCell>
-                  <TableCell>{org.memberCount}</TableCell>
-                  <TableCell>{org.adminCount}</TableCell>
                   <TableCell>
-                    {new Date(org.createdAt).toLocaleDateString()}
+                    {memberships.filter((m) => m.organization_id === org.id && m.status === 'active').length}
+                  </TableCell>
+                  <TableCell>
+                    {memberships.filter((m) => m.organization_id === org.id && m.status === 'active' && (m.role === 'admin' || m.role === 'owner')).length}
+                  </TableCell>
+                  <TableCell>
+                    {new Date(org.created_at).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
                     <Dropdown
@@ -187,12 +246,11 @@ export function OrganizationsPage() {
                     items={[
                     {
                       label: 'View Details',
-                      href: `/super-admin/organizations/${org.id}`,
+                      href: `/super-admin/tenants/${org.id}`,
                       icon: <Building2 className="w-4 h-4" />
                     },
                     {
-                      label:
-                      org.status === 'suspended' ? 'Activate' : 'Suspend',
+                      label: org.status === 'suspended' ? 'Activate' : 'Suspend',
                       onClick: () =>
                       handleStatusChange(
                         org.id,
@@ -226,41 +284,35 @@ export function OrganizationsPage() {
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        title="Create New Organization"
+        title="Create New Tenant"
         footer={
         <>
             <Button variant="ghost" onClick={() => setIsCreateModalOpen(false)}>
               Cancel
             </Button>
             <Button
-            onClick={() => {
-              addToast('Organization created successfully', 'success');
-              setIsCreateModalOpen(false);
-            }}>
-
-              Create Organization
+            onClick={() => void handleCreate()}>
+              Create Tenant
             </Button>
           </>
         }>
 
         <div className="space-y-4">
-          <Input
-            label="Organization Name"
-            placeholder="e.g. Acme Corp Community" />
-
-          <Input
-            label="Admin Email"
-            type="email"
-            placeholder="admin@example.com" />
-
+          <Input label="Tenant Name" placeholder="e.g. Acme Community" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input label="Tenant Slug" placeholder="acme" value={slug} onChange={(e) => setSlug(e.target.value)} />
+          <Input label="Admin Email" type="email" placeholder="admin@example.com" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Plan
-            </label>
-            <select className="w-full rounded-lg border-gray-300 shadow-sm focus:border-[var(--color-primary)] focus:ring-[var(--color-primary)]">
-              <option value="starter">Starter (R29/mo)</option>
-              <option value="pro">Pro (R99/mo)</option>
-              <option value="enterprise">Enterprise (Custom)</option>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Plan</label>
+            <select
+              className="w-full rounded-lg border-gray-300 shadow-sm focus:border-[var(--color-primary)] focus:ring-[var(--color-primary)]"
+              value={planId}
+              onChange={(e) => setPlanId(e.target.value)}
+            >
+              {plans.map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.name}
+                </option>
+              ))}
             </select>
           </div>
         </div>
