@@ -26,68 +26,93 @@ export function LoginPage() {
   const { addToast } = useToast();
   const redirectPath = (location.state as { from?: string } | null)?.from ?? '/communities';
 
+  const withTimeout = async <T,>(promise: Promise<T>, label: string) => {
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timeout`)), 10000)
+    );
+    return Promise.race([promise, timeout]);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setIsLoading(false);
-    if (error) {
-      addToast(getSafeErrorMessage(error, 'Unable to sign in. Please check your credentials.'), 'error');
-      return;
-    }
-
-    addToast('Successfully logged in!', 'success');
-    if (redirectPath !== '/communities') {
-      navigate(redirectPath);
-      return;
-    }
-
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user?.id;
-    if (!userId) {
-      navigate('/communities');
-      return;
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('platform_role')
-      .eq('user_id', userId)
-      .maybeSingle<{ platform_role: 'user' | 'super_admin' }>();
-
-    if (profile?.platform_role === 'super_admin') {
-      navigate('/super-admin');
-      return;
-    }
-
-    const { data: memberships } = await supabase
-      .from('organization_memberships')
-      .select('organization_id, role, status')
-      .eq('user_id', userId)
-      .eq('status', 'active');
-
-    if (memberships && memberships.length > 0) {
-      const primary = memberships.sort(
-        (a, b) => (rolePriority[b.role] ?? 0) - (rolePriority[a.role] ?? 0)
-      )[0];
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('slug')
-        .eq('id', primary.organization_id)
-        .maybeSingle<{ slug: string }>();
-      if (org?.slug) {
-        const adminRoles = ['owner', 'admin', 'supervisor'];
-        navigate(
-          adminRoles.includes(primary.role)
-            ? `/c/${org.slug}/admin`
-            : `/c/${org.slug}/app`
-        );
+    try {
+      const signInResult = await withTimeout(
+        supabase.auth.signInWithPassword({ email, password }),
+        'Sign-in'
+      );
+      const { data, error } = signInResult;
+      if (error) {
+        addToast(getSafeErrorMessage(error, 'Unable to sign in. Please check your credentials.'), 'error');
         return;
       }
-    }
 
-    navigate('/communities');
+      addToast('Successfully logged in!', 'success');
+      if (redirectPath !== '/communities') {
+        navigate(redirectPath);
+        return;
+      }
+
+      const userId = data.user?.id;
+      if (!userId) {
+        navigate('/communities');
+        return;
+      }
+
+      const [{ data: profile, error: profileError }, { data: memberships, error: membershipsError }] =
+        await withTimeout(
+          Promise.all([
+            supabase
+              .from('profiles')
+              .select('platform_role')
+              .eq('user_id', userId)
+              .maybeSingle<{ platform_role: 'user' | 'super_admin' }>(),
+            supabase
+              .from('organization_memberships')
+              .select('organization_id, role, status')
+              .eq('user_id', userId)
+              .eq('status', 'active')
+          ]),
+          'Profile lookup'
+        );
+
+      if (profileError || membershipsError) {
+        console.error('Login profile lookup failed', profileError ?? membershipsError);
+      }
+
+      if (profile?.platform_role === 'super_admin') {
+        navigate('/super-admin');
+        return;
+      }
+
+      if (memberships && memberships.length > 0) {
+        const primary = memberships.sort(
+          (a, b) => (rolePriority[b.role] ?? 0) - (rolePriority[a.role] ?? 0)
+        )[0];
+        const { data: org } = await supabase
+          .from('organizations')
+          .select('slug')
+          .eq('id', primary.organization_id)
+          .maybeSingle<{ slug: string }>();
+        if (org?.slug) {
+          const adminRoles = ['owner', 'admin', 'supervisor'];
+          navigate(
+            adminRoles.includes(primary.role)
+              ? `/c/${org.slug}/admin`
+              : `/c/${org.slug}/app`
+          );
+          return;
+        }
+      }
+
+      navigate('/communities');
+    } catch (error) {
+      console.error('Login failed', error);
+      addToast('Login timed out. Please check your connection and try again.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
