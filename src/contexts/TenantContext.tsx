@@ -8,7 +8,7 @@ type Tenant = {
   id: string;
   name: string;
   slug: string;
-  description: string | null;
+  description?: string | null;
   contact_email: string | null;
   logo_url: string | null;
   primary_color: string | null;
@@ -77,7 +77,7 @@ export function TenantProvider({ tenantSlug, children }: { tenantSlug: string; c
 
     const { data: orgData, error: orgError } = await supabase
       .from('organizations')
-      .select('id, name, slug, description, contact_email, logo_url, category, location, is_public, status, primary_color, secondary_color')
+      .select('id, name, slug, contact_email, logo_url, category, location, is_public, status, primary_color, secondary_color')
       .eq('slug', tenantSlug)
       .maybeSingle<Tenant>();
 

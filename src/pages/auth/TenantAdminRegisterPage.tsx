@@ -5,6 +5,7 @@ import { Input } from '../../components/ui/Input';
 import { useToast } from '../../components/ui/Toast';
 import { supabase } from '../../lib/supabase';
 import { getPasswordValidationError, isValidEmail } from '../../utils/validation';
+import { setPendingTenantBootstrap } from '../../utils/pendingAuthIntents';
 
 type PlanRow = {
   id: string;
@@ -23,23 +24,40 @@ export function TenantAdminRegisterPage() {
   const [planId, setPlanId] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const normalizeSlug = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('licenses')
         .select('id, name')
         .order('price_cents', { ascending: true })
         .returns<PlanRow[]>();
+      if (error) {
+        addToast('Unable to load plans.', 'error');
+        return;
+      }
       setPlans(data ?? []);
       if (data?.length) setPlanId(data[0].id);
     };
     void load();
-  }, []);
+  }, [addToast]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!tenantName.trim() || !tenantSlug.trim()) {
+    const normalizedSlug = normalizeSlug(tenantSlug);
+    if (!tenantName.trim() || !normalizedSlug) {
       addToast('Tenant name and slug are required.', 'error');
+      return;
+    }
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(normalizedSlug)) {
+      addToast('Use lowercase letters, numbers, and hyphens for the tenant slug.', 'error');
       return;
     }
     if (!fullName.trim()) {
@@ -60,7 +78,10 @@ export function TenantAdminRegisterPage() {
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName } }
+      options: {
+        data: { full_name: fullName },
+        emailRedirectTo: `${window.location.origin}/login`
+      }
     });
     if (signUpError || !signUpData.user) {
       addToast(signUpError?.message ?? 'Unable to create account.', 'error');
@@ -68,41 +89,35 @@ export function TenantAdminRegisterPage() {
       return;
     }
 
-    const { data: orgData, error: orgError } = await supabase
-      .from('organizations')
-      .insert({
-        name: tenantName,
-        slug: tenantSlug,
-        status: 'active'
-      })
-      .select('id')
-      .maybeSingle<{ id: string }>();
-    if (orgError || !orgData) {
-      addToast('Unable to create tenant.', 'error');
+    const session = signUpData.session;
+
+    if (!session?.user?.id) {
+      setPendingTenantBootstrap(email, {
+        tenantName: tenantName.trim(),
+        tenantSlug: normalizedSlug,
+        planId: planId || null
+      });
+      addToast('Account created. Verify your email, then sign in to finish tenant setup.', 'success');
+      setLoading(false);
+      navigate('/login');
+      return;
+    }
+
+    const { data: orgId, error: bootstrapError } = await supabase.rpc('bootstrap_tenant_admin', {
+      p_name: tenantName.trim(),
+      p_slug: normalizedSlug,
+      p_license_id: planId || null
+    });
+
+    if (bootstrapError || !orgId) {
+      addToast(bootstrapError?.message ?? 'Unable to create tenant.', 'error');
       setLoading(false);
       return;
     }
 
-    await supabase.from('organization_memberships').insert({
-      organization_id: orgData.id,
-      user_id: signUpData.user.id,
-      role: 'owner',
-      status: 'active'
-    });
-
-    await supabase.from('organization_licenses').insert({
-      organization_id: orgData.id,
-      license_id: planId,
-      status: 'trial'
-    });
-
-    await supabase.from('tenant_settings').insert({
-      organization_id: orgData.id
-    });
-
     setLoading(false);
     addToast('Tenant created. Continue onboarding.', 'success');
-    navigate(`/c/${tenantSlug}/admin/onboarding`);
+    navigate(`/c/${normalizedSlug}/admin/onboarding`);
   };
 
   return (
@@ -114,7 +129,11 @@ export function TenantAdminRegisterPage() {
 
       <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-2xl p-8 space-y-5">
         <Input label="Community Name" value={tenantName} onChange={(e) => setTenantName(e.target.value)} />
-        <Input label="Community Slug" value={tenantSlug} onChange={(e) => setTenantSlug(e.target.value)} />
+        <Input
+          label="Community Slug"
+          value={tenantSlug}
+          onChange={(e) => setTenantSlug(normalizeSlug(e.target.value))}
+        />
         <Input label="Your Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
         <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />

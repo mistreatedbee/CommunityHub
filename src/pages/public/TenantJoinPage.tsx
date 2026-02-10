@@ -7,6 +7,7 @@ import { useTenant } from '../../contexts/TenantContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { getPasswordValidationError, isValidEmail } from '../../utils/validation';
+import { setPendingTenantJoin } from '../../utils/pendingAuthIntents';
 
 type RegistrationField = {
   id: string;
@@ -106,7 +107,8 @@ export function TenantJoinPage() {
         email,
         password,
         options: {
-          data: { full_name: name }
+          data: { full_name: name },
+          emailRedirectTo: `${window.location.origin}/login`
         }
       });
       if (signUpError || !signUpData.user) {
@@ -114,18 +116,36 @@ export function TenantJoinPage() {
         setIsSubmitting(false);
         return;
       }
+      if (!signUpData.session) {
+        setPendingTenantJoin(email, {
+          tenantId: tenant.id,
+          tenantSlug: tenant.slug,
+          name: name.trim(),
+          formData,
+          approvalRequired: settings.approval_required
+        });
+        addToast('Account created. Verify your email, then sign in to complete registration.', 'success');
+        setIsSubmitting(false);
+        navigate('/login', { state: { from: `/c/${tenant.slug}/join` } });
+        return;
+      }
       userId = signUpData.user.id;
     }
 
     const membershipStatus = settings.approval_required ? 'pending' : 'active';
-    await supabase.from('organization_memberships').upsert({
+    const { error: membershipError } = await supabase.from('organization_memberships').upsert({
       organization_id: tenant.id,
       user_id: userId,
       role: 'member',
       status: membershipStatus
     });
+    if (membershipError) {
+      addToast(membershipError.message, 'error');
+      setIsSubmitting(false);
+      return;
+    }
 
-    await supabase.from('registration_submissions').insert({
+    const { error: submissionError } = await supabase.from('registration_submissions').insert({
       organization_id: tenant.id,
       user_id: userId,
       payload: {
@@ -134,6 +154,11 @@ export function TenantJoinPage() {
         ...formData
       }
     });
+    if (submissionError) {
+      addToast(submissionError.message, 'error');
+      setIsSubmitting(false);
+      return;
+    }
 
     setIsSubmitting(false);
 

@@ -8,6 +8,12 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useToast } from '../../components/ui/Toast';
 import { supabase } from '../../lib/supabase';
 import { getSafeErrorMessage } from '../../utils/errors';
+import {
+  clearPendingTenantBootstrap,
+  clearPendingTenantJoin,
+  getPendingTenantBootstrap,
+  getPendingTenantJoin
+} from '../../utils/pendingAuthIntents';
 
 export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -58,6 +64,70 @@ export function LoginPage() {
       if (!userId) {
         navigate('/communities');
         return;
+      }
+      const userEmail = data.user?.email ?? '';
+
+      const pendingBootstrap = getPendingTenantBootstrap(userEmail);
+      if (pendingBootstrap) {
+        const { data: orgId, error: bootstrapError } = await supabase.rpc('bootstrap_tenant_admin', {
+          p_name: pendingBootstrap.tenantName,
+          p_slug: pendingBootstrap.tenantSlug,
+          p_license_id: pendingBootstrap.planId
+        });
+        if (bootstrapError || !orgId) {
+          addToast(
+            getSafeErrorMessage(
+              bootstrapError,
+              'Signed in, but tenant setup is still pending. Please retry tenant registration.'
+            ),
+            'error'
+          );
+        } else {
+          clearPendingTenantBootstrap(userEmail);
+          addToast('Tenant setup completed. Continue onboarding.', 'success');
+          navigate(`/c/${pendingBootstrap.tenantSlug}/admin/onboarding`);
+          return;
+        }
+      }
+
+      const pendingJoin = getPendingTenantJoin(userEmail);
+      if (pendingJoin) {
+        const membershipStatus = pendingJoin.approvalRequired ? 'pending' : 'active';
+        const { error: membershipError } = await supabase.from('organization_memberships').upsert({
+          organization_id: pendingJoin.tenantId,
+          user_id: userId,
+          role: 'member',
+          status: membershipStatus
+        });
+        if (membershipError) {
+          addToast(getSafeErrorMessage(membershipError, 'Signed in, but join request could not be completed.'), 'error');
+        } else {
+          const { error: submissionError } = await supabase.from('registration_submissions').insert({
+            organization_id: pendingJoin.tenantId,
+            user_id: userId,
+            payload: {
+              name: pendingJoin.name,
+              email: userEmail,
+              ...pendingJoin.formData
+            }
+          });
+          if (submissionError) {
+            addToast(
+              getSafeErrorMessage(submissionError, 'Signed in, but registration details could not be saved.'),
+              'error'
+            );
+          } else {
+            clearPendingTenantJoin(userEmail);
+            if (pendingJoin.approvalRequired) {
+              addToast('Registration submitted. An admin will review your request.', 'success');
+              navigate(`/c/${pendingJoin.tenantSlug}`);
+              return;
+            }
+            addToast('Welcome! Your account is active.', 'success');
+            navigate(`/c/${pendingJoin.tenantSlug}/app`);
+            return;
+          }
+        }
       }
 
       const [{ data: profile, error: profileError }, { data: memberships, error: membershipsError }] =
