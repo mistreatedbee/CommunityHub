@@ -122,7 +122,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (mounted) setLoading(true);
+      }
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
       try {

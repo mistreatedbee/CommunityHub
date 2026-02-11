@@ -55,6 +55,7 @@ import { PlansPage } from './pages/super-admin/PlansPage';
 import { SystemAnalyticsPage } from './pages/super-admin/SystemAnalyticsPage';
 import { AuditLogsPage } from './pages/super-admin/AuditLogsPage';
 import { SuperAdminSettingsPage } from './pages/super-admin/SuperAdminSettingsPage';
+import { DebugSessionPage } from './pages/debug/DebugSessionPage';
 
 export function App() {
   return (
@@ -80,6 +81,7 @@ export function App() {
               <Route path="/setup-community" element={<SetupCommunityPage />} />
               <Route path="/register" element={<Navigate to="/enter-license" replace />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/debug-session" element={<DebugSessionPage />} />
 
               <Route element={<TenantRouteProvider />}>
                 <Route

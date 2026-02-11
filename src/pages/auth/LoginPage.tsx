@@ -22,8 +22,9 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [postLoginRedirect, setPostLoginRedirect] = useState<string | null>(null);
   const { organization } = useTheme();
-  const { user, loading: authLoading, platformRole, memberships } = useAuth();
+  const { user, loading: authLoading, session, platformRole, memberships } = useAuth();
   const rolePriority: Record<string, number> = {
     owner: 4,
     admin: 3,
@@ -36,8 +37,15 @@ export function LoginPage() {
   const { addToast } = useToast();
   const redirectPath = (location.state as { from?: string } | null)?.from ?? '/communities';
 
+  // Single source of redirect: wait for AuthContext to finish loading so session + profile (platformRole) are set.
   useEffect(() => {
     if (authLoading || !user) return;
+
+    if (postLoginRedirect) {
+      navigate(postLoginRedirect, { replace: true });
+      setPostLoginRedirect(null);
+      return;
+    }
 
     if (platformRole === 'super_admin') {
       navigate('/super-admin', { replace: true });
@@ -73,14 +81,7 @@ export function LoginPage() {
       return;
     }
     navigate('/communities', { replace: true });
-  }, [authLoading, user, platformRole, memberships, navigate]);
-
-  const withTimeout = async <T,>(promise: Promise<T>, label: string) => {
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timeout`)), 10000)
-    );
-    return Promise.race([promise, timeout]);
-  };
+  }, [authLoading, user, session, platformRole, memberships, postLoginRedirect, navigate]);
 
   const getLoginErrorMessage = (err: unknown): string => {
     const obj = err && typeof err === 'object' ? err : null;
@@ -129,44 +130,38 @@ export function LoginPage() {
         return;
       }
 
-      addToast('Successfully logged in!', 'success');
-      if (redirectPath !== '/communities') {
-        navigate(redirectPath);
-        return;
+      // Debug: confirm session is persisted (remove in production if desired)
+      const { data: sessionCheck } = await supabase.auth.getSession();
+      if (import.meta.env.DEV && sessionCheck?.session) {
+        console.debug('[Login] Session after signIn', { hasSession: true, expiresAt: sessionCheck.session.expires_at });
       }
+
+      addToast('Successfully logged in!', 'success');
 
       const userId = data.user?.id;
-      if (!userId) {
-        navigate('/communities');
-        return;
-      }
-
-      // Check super_admin first – always redirect to correct dashboard
-      const { data: profileRow, error: profileError } = await supabase
-        .from('profiles')
-        .select('platform_role')
-        .eq('user_id', userId)
-        .maybeSingle<{ platform_role: 'user' | 'super_admin' }>();
-
-      if (profileError) {
-        console.error('[Login] Profile fetch failed', profileError);
-      }
-
-      if (profileRow?.platform_role === 'super_admin') {
-        navigate('/super-admin', { replace: true });
-        return;
-      }
-
       const userEmail = (data.user?.email ?? normalizedEmail).trim().toLowerCase();
 
-      const pendingBootstrap = getPendingTenantBootstrap(userEmail);
-      if (pendingBootstrap) {
-        const { data: orgId, error: bootstrapError } = await supabase.rpc('bootstrap_tenant_admin', {
-          p_name: pendingBootstrap.tenantName,
-          p_slug: pendingBootstrap.tenantSlug,
-          p_license_id: pendingBootstrap.planId
-        });
-        if (bootstrapError || !orgId) {
+      if (userId && redirectPath !== '/communities') {
+        setPostLoginRedirect(redirectPath);
+        return;
+      }
+
+      // Run one-time pending actions (bootstrap/join) and set postLoginRedirect; do NOT navigate here.
+      // Redirect is done in useEffect when authLoading becomes false and AuthContext has platformRole/memberships.
+      if (userId) {
+        const pendingBootstrap = getPendingTenantBootstrap(userEmail);
+        if (pendingBootstrap) {
+          const { data: orgId, error: bootstrapError } = await supabase.rpc('bootstrap_tenant_admin', {
+            p_name: pendingBootstrap.tenantName,
+            p_slug: pendingBootstrap.tenantSlug,
+            p_license_id: pendingBootstrap.planId
+          });
+          if (!bootstrapError && orgId) {
+            clearPendingTenantBootstrap(userEmail);
+            addToast('Tenant setup completed. Continue onboarding.', 'success');
+            setPostLoginRedirect(`/c/${pendingBootstrap.tenantSlug}/admin/onboarding`);
+            return;
+          }
           addToast(
             getSafeErrorMessage(
               bootstrapError,
@@ -174,114 +169,42 @@ export function LoginPage() {
             ),
             'error'
           );
-        } else {
-          clearPendingTenantBootstrap(userEmail);
-          addToast('Tenant setup completed. Continue onboarding.', 'success');
-          navigate(`/c/${pendingBootstrap.tenantSlug}/admin/onboarding`);
-          return;
         }
-      }
 
-      const pendingJoin = getPendingTenantJoin(userEmail);
-      if (pendingJoin) {
-        const membershipStatus = pendingJoin.approvalRequired ? 'pending' : 'active';
-        const { error: membershipError } = await supabase.from('organization_memberships').upsert({
-          organization_id: pendingJoin.tenantId,
-          user_id: userId,
-          role: 'member',
-          status: membershipStatus
-        });
-        if (membershipError) {
-          addToast(getSafeErrorMessage(membershipError, 'Signed in, but join request could not be completed.'), 'error');
-        } else {
-          const { error: submissionError } = await supabase.from('registration_submissions').insert({
+        const pendingJoin = getPendingTenantJoin(userEmail);
+        if (pendingJoin) {
+          const membershipStatus = pendingJoin.approvalRequired ? 'pending' : 'active';
+          const { error: membershipError } = await supabase.from('organization_memberships').upsert({
             organization_id: pendingJoin.tenantId,
             user_id: userId,
-            payload: {
-              name: pendingJoin.name,
-              email: userEmail,
-              ...pendingJoin.formData
-            }
+            role: 'member',
+            status: membershipStatus
           });
-          if (submissionError) {
-            addToast(
-              getSafeErrorMessage(submissionError, 'Signed in, but registration details could not be saved.'),
-              'error'
-            );
-          } else {
+          if (!membershipError) {
+            await supabase.from('registration_submissions').insert({
+              organization_id: pendingJoin.tenantId,
+              user_id: userId,
+              payload: {
+                name: pendingJoin.name,
+                email: userEmail,
+                ...pendingJoin.formData
+              }
+            });
             clearPendingTenantJoin(userEmail);
             if (pendingJoin.approvalRequired) {
               addToast('Registration submitted. An admin will review your request.', 'success');
-              navigate(`/c/${pendingJoin.tenantSlug}`);
-              return;
+              setPostLoginRedirect(`/c/${pendingJoin.tenantSlug}`);
+            } else {
+              addToast('Welcome! Your account is active.', 'success');
+              setPostLoginRedirect(`/c/${pendingJoin.tenantSlug}/app`);
             }
-            addToast('Welcome! Your account is active.', 'success');
-            navigate(`/c/${pendingJoin.tenantSlug}/app`);
             return;
           }
+          addToast(getSafeErrorMessage(membershipError, 'Signed in, but join request could not be completed.'), 'error');
         }
       }
 
-      let profile: { platform_role: 'user' | 'super_admin' } | null = null;
-      let memberships: Array<{ organization_id: string; role: string; status: string }> | null = null;
-      try {
-        const [profileResult, membershipsResult] = await withTimeout(
-          Promise.all([
-            supabase
-              .from('profiles')
-              .select('platform_role')
-              .eq('user_id', userId)
-              .maybeSingle<{ platform_role: 'user' | 'super_admin' }>(),
-            supabase
-              .from('organization_memberships')
-              .select('organization_id, role, status')
-              .eq('user_id', userId)
-              .eq('status', 'active')
-          ]),
-          'Profile lookup'
-        );
-        profile = profileResult.data;
-        memberships = membershipsResult.data as Array<{ organization_id: string; role: string; status: string }> | null;
-        if (profileResult.error || membershipsResult.error) {
-          console.error('Login profile lookup failed', profileResult.error ?? membershipsResult.error);
-        }
-      } catch (lookupError) {
-        console.error('Login profile lookup timed out', lookupError);
-      }
-
-      if (profile?.platform_role === 'super_admin') {
-        navigate('/super-admin');
-        return;
-      }
-
-      if (memberships && memberships.length > 0) {
-        const primary = memberships.sort(
-          (a, b) => (rolePriority[b.role] ?? 0) - (rolePriority[a.role] ?? 0)
-        )[0];
-        const { data: org, error: orgError } = await supabase
-          .from('organizations')
-          .select('slug')
-          .eq('id', primary.organization_id)
-          .maybeSingle<{ slug: string }>();
-        if (orgError) {
-          console.error('Login org lookup failed', orgError);
-        }
-        if (org?.slug) {
-          const adminRoles = ['owner', 'admin', 'supervisor'];
-          navigate(
-            adminRoles.includes(primary.role)
-              ? `/c/${org.slug}/admin`
-              : `/c/${org.slug}/app`
-          );
-          return;
-        }
-      }
-
-      if (hasLicenseSession()) {
-        navigate('/setup-community', { replace: true });
-        return;
-      }
-      navigate('/communities');
+      // No immediate navigate: useEffect will redirect when AuthContext has finished loading (session + profile).
     } catch (err) {
       console.error('Login failed', err);
       const msg = getLoginErrorMessage(err);
