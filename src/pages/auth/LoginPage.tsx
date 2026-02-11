@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, Lock, Mail } from 'lucide-react';
+import { AlertCircle, ArrowRight, Loader2, Lock, Mail } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent } from '../../components/ui/Card';
@@ -19,6 +19,7 @@ import { getSafeErrorMessage } from '../../utils/errors';
 
 export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { organization } = useTheme();
@@ -81,34 +82,50 @@ export function LoginPage() {
     return Promise.race([promise, timeout]);
   };
 
-  const getLoginErrorMessage = (error: unknown) => {
-    const message =
-      typeof error === 'object' && error && 'message' in error && typeof error.message === 'string'
-        ? error.message
-        : '';
+  const getLoginErrorMessage = (err: unknown): string => {
+    const obj = err && typeof err === 'object' ? err : null;
+    const message = obj && 'message' in obj && typeof (obj as { message: unknown }).message === 'string'
+      ? (obj as { message: string }).message
+      : err instanceof Error ? err.message : '';
 
-    if (!message) {
-      return 'Unable to sign in. Please check your credentials.';
-    }
+    if (!message) return 'Unable to sign in. Please check your credentials and try again.';
     if (/email not confirmed/i.test(message)) {
       return 'Your email is not verified yet. Check your inbox, confirm your account, then sign in again.';
     }
     if (/invalid login credentials/i.test(message)) {
-      return 'Incorrect email or password.';
+      return 'Incorrect email or password. Please try again.';
     }
-    return message;
+    if (/user not found|invalid_credentials/i.test(message)) {
+      return 'No account found with this email. Check your email or sign up first.';
+    }
+    if (/rate limit|too many requests/i.test(message)) {
+      return 'Too many attempts. Please wait a few minutes and try again.';
+    }
+    if (/network|fetch|failed to fetch/i.test(message)) {
+      return 'Network error. Check your internet connection and try again.';
+    }
+    if (/session.*expired|jwt expired/i.test(message)) {
+      return 'Your session expired. Please sign in again.';
+    }
+    if (/timeout/i.test(message)) {
+      return 'Request timed out. Please check your connection and try again.';
+    }
+    return message.length > 120 ? `${message.slice(0, 120)}…` : message;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     setIsLoading(true);
 
     try {
       const normalizedEmail = email.trim().toLowerCase();
       const signInResult = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
-      const { data, error } = signInResult;
-      if (error) {
-        addToast(getLoginErrorMessage(error), 'error');
+      const { data, error: signInError } = signInResult;
+      if (signInError) {
+        const msg = getLoginErrorMessage(signInError);
+        setError(msg);
+        addToast(msg, 'error');
         return;
       }
 
@@ -260,16 +277,30 @@ export function LoginPage() {
         return;
       }
       navigate('/communities');
-    } catch (error) {
-      console.error('Login failed', error);
-      addToast(getSafeErrorMessage(error, 'Unable to sign in right now. Please try again.'), 'error');
+    } catch (err) {
+      console.error('Login failed', err);
+      const msg = getLoginErrorMessage(err);
+      setError(msg);
+      addToast(msg, 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative">
+      {isLoading && (
+        <div
+          className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gray-50/95 backdrop-blur-sm"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <Loader2 className="w-12 h-12 animate-spin text-[var(--color-primary)] mb-4" />
+          <p className="text-gray-600 font-medium">Signing you in…</p>
+          <p className="text-sm text-gray-500 mt-1">Taking you to your dashboard</p>
+        </div>
+      )}
+
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-8">
         <Link to="/" className="inline-flex items-center gap-2 mb-6">
           <div className="w-10 h-10 rounded-xl bg-[var(--color-primary)] flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-blue-500/20">
@@ -289,13 +320,23 @@ export function LoginPage() {
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <Card className="shadow-xl border-0 ring-1 ring-gray-200">
           <CardContent className="p-8">
-            <form className="space-y-6" onSubmit={handleSubmit}>
+            <form className="space-y-6" onSubmit={handleSubmit} aria-disabled={isLoading}>
+              {error && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-3 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800"
+                >
+                  <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                  <p className="text-sm">{error}</p>
+                </div>
+              )}
+
               <Input
                 label="Email address"
                 type="email"
                 placeholder="you@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); setError(null); }}
                 required
                 leftIcon={<Mail className="w-5 h-5" />}
               />
@@ -306,7 +347,7 @@ export function LoginPage() {
                   type="password"
                   placeholder="********"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => { setPassword(e.target.value); setError(null); }}
                   required
                   leftIcon={<Lock className="w-5 h-5" />}
                 />
