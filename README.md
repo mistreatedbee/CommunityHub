@@ -7,6 +7,17 @@ A professional community management platform for South African organizations.
 1. Run `npm install`
 2. Run `npm run dev`
 
+### Super Admin access
+
+- **New install:** The first user who signs up is automatically given the `super_admin` role.
+- **Existing user:** To promote your account to super admin, run in the Supabase SQL Editor (Dashboard → SQL Editor):
+
+  ```sql
+  update public.profiles set platform_role = 'super_admin' where email = 'your@email.com';
+  ```
+
+  Then log in again; you will be redirected to `/super-admin`.
+
 ## Architecture Overview
 
 ### Tenant Isolation

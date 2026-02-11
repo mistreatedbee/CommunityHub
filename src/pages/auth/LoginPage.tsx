@@ -22,7 +22,7 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { organization } = useTheme();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, platformRole } = useAuth();
   const rolePriority: Record<string, number> = {
     owner: 4,
     admin: 3,
@@ -37,9 +37,13 @@ export function LoginPage() {
 
   useEffect(() => {
     if (!authLoading && user) {
-      navigate('/communities', { replace: true });
+      if (platformRole === 'super_admin') {
+        navigate('/super-admin', { replace: true });
+      } else {
+        navigate('/communities', { replace: true });
+      }
     }
-  }, [authLoading, user, navigate]);
+  }, [authLoading, user, platformRole, navigate]);
 
   const withTimeout = async <T,>(promise: Promise<T>, label: string) => {
     const timeout = new Promise<never>((_, reject) =>
