@@ -91,6 +91,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .returns<Membership[]>()
       ]);
 
+      if (import.meta.env.DEV) {
+        if (profileError) {
+          console.debug('[AuthContext] Profile fetch failed', profileError.code, profileError.message);
+        } else {
+          console.debug('[AuthContext] Profile fetch ok, platform_role=', profileData?.platform_role ?? 'null');
+        }
+        if (membershipsError) {
+          console.debug('[AuthContext] Memberships fetch failed', membershipsError.code, membershipsError.message);
+        }
+      }
       if (profileError) {
         console.error('[AuthContext] Profile fetch failed', profileError.code, profileError.message);
       }
@@ -126,6 +136,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+      if (import.meta.env.DEV && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+        console.debug('[AuthContext] onAuthStateChange', event, 'userId=', nextSession?.user?.id);
+      }
       if (event === 'SIGNED_OUT') {
         if (mounted) {
           setLoading(true);
@@ -150,7 +163,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error('Failed to refresh auth context', error);
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          if (import.meta.env.DEV) {
+            console.debug('[AuthContext] setLoading(false) after', event);
+          }
+          setLoading(false);
+        }
       }
     });
 

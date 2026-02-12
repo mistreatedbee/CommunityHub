@@ -81,7 +81,8 @@ export function App() {
               <Route path="/setup-community" element={<SetupCommunityPage />} />
               <Route path="/register" element={<Navigate to="/enter-license" replace />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/debug-session" element={<DebugSessionPage />} />
+              <Route path="/debug-session" element={import.meta.env.DEV ? <DebugSessionPage /> : <Navigate to="/" replace />} />
+              <Route path="/debug-auth" element={import.meta.env.DEV ? <DebugSessionPage /> : <Navigate to="/" replace />} />
 
               <Route element={<TenantRouteProvider />}>
                 <Route

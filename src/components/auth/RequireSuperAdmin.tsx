@@ -7,6 +7,9 @@ export function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
   const { loading, platformRole } = useAuth();
 
   if (loading) {
+    if (import.meta.env.DEV) {
+      console.debug('[RequireSuperAdmin] showing loader (loading=true)');
+    }
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-[var(--color-primary)]" />
@@ -14,6 +17,9 @@ export function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
     );
   }
   if (platformRole !== 'super_admin') {
+    if (import.meta.env.DEV) {
+      console.debug('[RequireSuperAdmin] redirecting to /login because loading=false and platformRole=', platformRole);
+    }
     return <Navigate to="/login" replace />;
   }
 

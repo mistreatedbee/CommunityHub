@@ -93,12 +93,18 @@ export function LoginPage() {
     setLoginSuccessAt(null);
 
     if (postLoginRedirect) {
+      if (import.meta.env.DEV) {
+        console.debug('[Login] redirect effect: authLoading=false, hasUser=true, platformRole=', platformRole, '→', postLoginRedirect);
+      }
       navigate(postLoginRedirect, { replace: true });
       setPostLoginRedirect(null);
       return;
     }
 
     if (platformRole === 'super_admin') {
+      if (import.meta.env.DEV) {
+        console.debug('[Login] redirect effect: authLoading=false, hasUser=true, platformRole=super_admin → /super-admin');
+      }
       navigate('/super-admin', { replace: true });
       return;
     }
@@ -107,6 +113,9 @@ export function LoginPage() {
       const primary = activeMemberships.sort(
         (a, b) => (rolePriority[b.role] ?? 0) - (rolePriority[a.role] ?? 0)
       )[0];
+      if (import.meta.env.DEV) {
+        console.debug('[Login] redirect effect: tenant member → fetching org slug for', primary.organization_id);
+      }
       supabase
         .from('organizations')
         .select('slug')
@@ -115,22 +124,24 @@ export function LoginPage() {
         .then(({ data }) => {
           if (data?.slug) {
             const adminRoles = ['owner', 'admin', 'supervisor'];
-            navigate(
-              adminRoles.includes(primary.role)
-                ? `/c/${data.slug}/admin`
-                : `/c/${data.slug}/app`,
-              { replace: true }
-            );
+            const target = adminRoles.includes(primary.role)
+              ? `/c/${data.slug}/admin`
+              : `/c/${data.slug}/app`;
+            if (import.meta.env.DEV) console.debug('[Login] redirect effect →', target);
+            navigate(target, { replace: true });
           } else {
+            if (import.meta.env.DEV) console.debug('[Login] redirect effect → /communities (no slug)');
             navigate('/communities', { replace: true });
           }
         });
       return;
     }
     if (hasLicenseSession()) {
+      if (import.meta.env.DEV) console.debug('[Login] redirect effect → /setup-community');
       navigate('/setup-community', { replace: true });
       return;
     }
+    if (import.meta.env.DEV) console.debug('[Login] redirect effect → /communities (default)');
     navigate('/communities', { replace: true });
   }, [authLoading, user, session, platformRole, memberships, postLoginRedirect, navigate]);
 
@@ -176,6 +187,12 @@ export function LoginPage() {
       const normalizedEmail = email.trim().toLowerCase();
       const signInResult = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
       const { data, error: signInError } = signInResult;
+      if (import.meta.env.DEV) {
+        console.debug('[Login] signInWithPassword result', {
+          userId: data?.user?.id ?? null,
+          error: signInError ? { code: signInError.code, message: signInError.message } : null
+        });
+      }
       if (signInError) {
         if (import.meta.env.DEV) console.error('[Login] Supabase auth error', signInError);
         const msg = getLoginErrorMessage(signInError);
@@ -184,10 +201,21 @@ export function LoginPage() {
         return;
       }
 
-      // Debug: confirm session is persisted (remove in production if desired)
       const { data: sessionCheck } = await supabase.auth.getSession();
-      if (import.meta.env.DEV && sessionCheck?.session) {
-        console.debug('[Login] Session after signIn', { hasSession: true, expiresAt: sessionCheck.session.expires_at });
+      if (import.meta.env.DEV) {
+        console.debug('[Login] getSession() immediately after signIn', {
+          sessionExists: !!sessionCheck?.session,
+          expires_at: sessionCheck?.session?.expires_at ?? null,
+          userId: sessionCheck?.session?.user?.id ?? null
+        });
+      }
+      if (!sessionCheck?.session) {
+        if (import.meta.env.DEV) {
+          console.warn('[Login] Session is null after signIn — possible storage/persist issue');
+        }
+        setError('Sign-in succeeded but session was not saved. Please try again or check your browser storage.');
+        addToast('Session could not be saved. Please try again.', 'error');
+        return;
       }
 
       addToast('Successfully logged in!', 'success');
@@ -196,20 +224,7 @@ export function LoginPage() {
       const userId = data.user?.id;
       const userEmail = (data.user?.email ?? normalizedEmail).trim().toLowerCase();
 
-      // Redirect super admin to dashboard immediately (don't wait for AuthContext)
-      if (userId) {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('platform_role')
-          .eq('user_id', userId)
-          .maybeSingle<{ platform_role: 'user' | 'super_admin' }>();
-        if (profileData?.platform_role === 'super_admin') {
-          setIsLoading(false);
-          navigate('/super-admin', { replace: true });
-          return;
-        }
-      }
-
+      // Do not navigate here — wait for AuthContext to update, then the redirect useEffect will run.
       if (userId && redirectPath !== '/communities') {
         setPostLoginRedirect(redirectPath);
         return;
@@ -272,40 +287,7 @@ export function LoginPage() {
         }
       }
 
-      // Immediate redirect: fetch profile and memberships so we don't wait for AuthContext listener.
-      if (userId) {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('platform_role')
-          .eq('user_id', userId)
-          .maybeSingle<{ platform_role: 'user' | 'super_admin' }>();
-        if (profileData?.platform_role === 'super_admin') {
-          navigate('/super-admin', { replace: true });
-          return;
-        }
-        const { data: memsData } = await supabase
-          .from('organization_memberships')
-          .select('organization_id, role, status')
-          .eq('user_id', userId)
-          .eq('status', 'active');
-        if (memsData?.length) {
-          const primary = memsData.sort((a, b) => (rolePriority[b.role] ?? 0) - (rolePriority[a.role] ?? 0))[0];
-          const { data: orgData } = await supabase
-            .from('organizations')
-            .select('slug')
-            .eq('id', primary.organization_id)
-            .maybeSingle<{ slug: string }>();
-          if (orgData?.slug) {
-            const adminRoles = ['owner', 'admin', 'supervisor'];
-            navigate(
-              adminRoles.includes(primary.role) ? `/c/${orgData.slug}/admin` : `/c/${orgData.slug}/app`,
-              { replace: true }
-            );
-            return;
-          }
-        }
-        navigate('/communities', { replace: true });
-      }
+      // Redirect is handled only by the useEffect that runs when AuthContext has user + platformRole/memberships.
     } catch (err) {
       console.error('Login failed', err);
       const msg = getLoginErrorMessage(err);

@@ -8,6 +8,9 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   const location = useLocation();
 
   if (loading) {
+    if (import.meta.env.DEV) {
+      console.debug('[RequireAuth] showing spinner (loading=true)');
+    }
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Spinner size="lg" />
@@ -16,6 +19,9 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
+    if (import.meta.env.DEV) {
+      console.debug('[RequireAuth] redirecting to /login because loading=false and user=null');
+    }
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
