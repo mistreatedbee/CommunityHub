@@ -141,7 +141,7 @@ export function LoginPage() {
       : err instanceof Error ? err.message : '';
 
     if (!message) return 'Unable to sign in. Please check your credentials and try again.';
-    if (/email not confirmed/i.test(message)) {
+    if (/email not confirmed|signup_not confirmed/i.test(message)) {
       return 'Your email is not verified yet. Check your inbox, confirm your account, then sign in again.';
     }
     if (/invalid login credentials/i.test(message)) {
@@ -175,6 +175,7 @@ export function LoginPage() {
       const signInResult = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
       const { data, error: signInError } = signInResult;
       if (signInError) {
+        if (import.meta.env.DEV) console.error('[Login] Supabase auth error', signInError);
         const msg = getLoginErrorMessage(signInError);
         setError(msg);
         addToast(msg, 'error');
@@ -378,6 +379,10 @@ export function LoginPage() {
             </form>
           </CardContent>
         </Card>
+        <p className="mt-6 text-center text-xs text-gray-500">
+          Still can't log in? Check: user exists in Supabase Auth, email is confirmed, and run{' '}
+          <code className="bg-gray-100 px-1 rounded">supabase/fix-super-admin.sql</code> in the SQL Editor if you need super admin.
+        </p>
       </div>
     </div>
   );

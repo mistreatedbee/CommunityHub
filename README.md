@@ -18,6 +18,12 @@ A professional community management platform for South African organizations.
 
   Replace `your@email.com` with your actual email. Then log out and log in again; you will be redirected to `/super-admin`.
 
+### Migrating to a new Supabase project
+
+1. Update `.env`: set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `DATABASE_URL` to the new project.
+2. Apply schema: from this repo run `npm run migrate` (requires `DATABASE_URL` and `pg`). Or in the new project’s **Supabase Dashboard → SQL Editor**, run each file in `supabase/migrations/` in filename order.
+3. In the new project, create your first user in **Authentication → Users** (or sign up from the app), then set them as super admin (see “Super Admin access” above).
+
 ### Vercel deployment
 
 - **Root Directory:** Leave empty (code is at repo root).

@@ -9,6 +9,9 @@ update public.profiles
 set platform_role = 'super_admin'
 where email = 'superadmin_Hil0ph@example.com';
 
+-- First super admin (run in SQL Editor after creating user in Auth):
+update public.profiles set platform_role = 'super_admin' where email = 'ashleymash013@gmail.com';
+
 -- Demo tenant (optional)
 insert into public.organizations (name, slug, status, is_public, category, location)
 values
