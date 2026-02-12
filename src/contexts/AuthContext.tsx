@@ -120,6 +120,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } finally {
         if (mounted) setLoading(false);
       }
+    }).catch((err) => {
+      console.error('[AuthContext] getSession failed', err);
+      if (mounted) setLoading(false);
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
