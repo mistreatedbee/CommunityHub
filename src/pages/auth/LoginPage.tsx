@@ -232,14 +232,13 @@ export function LoginPage() {
       }
       if (!sessionCheck?.session) {
         if (import.meta.env.DEV) {
-          console.warn('[Login] Session is null after signIn — possible storage/persist issue');
+          console.warn('[Login] Session is null right after signIn — continuing anyway; auth listener may set it shortly.');
         }
-        setError('Sign-in succeeded but session was not saved. Please try again or check your browser storage.');
-        addToast('Session could not be saved. Please try again.', 'error');
-        return;
+        addToast('Sign-in accepted. Loading your session…', 'info');
+      } else {
+        addToast('Successfully logged in!', 'success');
       }
 
-      addToast('Successfully logged in!', 'success');
       setLoginSuccessAt(Date.now());
 
       const userId = data.user?.id;
